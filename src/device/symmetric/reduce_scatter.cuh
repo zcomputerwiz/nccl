@@ -412,7 +412,8 @@ static __device__ void reduceMultimem(int tn, int t, Red red, T* input, T* outpu
   if (sizeof(T) == BytePerPack || (inputUptr - outputUptr) % BytePerPack == 0) {
     constexpr int UnrollPacks = 8 * (16 / BytePerPack);
     constexpr int BytePerChunk = UnrollPacks * WARP_SIZE * BytePerPack;
-    static_assert(ncclSymkMcPerRankOffsetBytes % BytePerChunk == 0);
+    static_assert(ncclSymkMcPerRankOffsetBytes % BytePerChunk == 0,
+                  "ncclSymkMcPerRankOffsetBytes must be divisible by BytePerChunk");
     uint32_t nChunks = (nBytes - nPreBytes) / BytePerChunk;
     uintptr_t cursorAfter = nPreBytes + uintptr_t(nChunks) * BytePerChunk;
     nSufBytes = nBytes - cursorAfter;

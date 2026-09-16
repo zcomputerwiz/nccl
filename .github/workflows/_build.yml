@@ -94,12 +94,16 @@ jobs:
             cmake -B build -G "Visual Studio 17 2022" -A x64 \
               -DCMAKE_BUILD_TYPE="${{ inputs.build-type }}" \
               -DCMAKE_CUDA_ARCHITECTURES="${{ inputs.cuda-archs }}" \
+              -DCMAKE_CXX_STANDARD=17 \
+              -DCMAKE_CUDA_STANDARD=17 \
               -DBUILD_NCCL4PY=OFF \
               -DWERROR=OFF
           else
             cmake -B build \
               -DCMAKE_BUILD_TYPE="${{ inputs.build-type }}" \
               -DCMAKE_CUDA_ARCHITECTURES="${{ inputs.cuda-archs }}" \
+              -DCMAKE_CXX_STANDARD=17 \
+              -DCMAKE_CUDA_STANDARD=17 \
               -DBUILD_NCCL4PY=OFF \
               -DWERROR=OFF
           fi

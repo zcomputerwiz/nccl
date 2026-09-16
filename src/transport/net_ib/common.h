@@ -144,7 +144,7 @@ struct alignas(32) ncclIbRemoteSpeedBuf {
   volatile uint64_t counter;
   uint16_t speedGbps[NCCL_IB_MAX_DEVS_PER_NIC];
 };
-static_assert(sizeof(ncclIbRemoteSpeedBuf) == 32);
+static_assert(sizeof(ncclIbRemoteSpeedBuf) == 32, "ncclIbRemoteSpeedBuf size must be 32 bytes");
 
 // Per-Dev connection metadata
 struct ncclIbDevInfo {

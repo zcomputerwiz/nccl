@@ -22,7 +22,7 @@ struct ncclGinGdakiGPUContext_v1 {
   __be32 sink_buffer_lkey;
 };
 
-static_assert(sizeof(ncclGinGdakiGPUContext_v1) == 72);
+static_assert(sizeof(ncclGinGdakiGPUContext_v1) == 72, "ncclGinGdakiGPUContext_v1 size must be 72 bytes");
 
 void ncclGinGdakiGPUContext_v1_init(void* ctxArray, int idx, struct doca_gpu_dev_verbs_qp* gdqp,
                                     struct doca_gpu_dev_verbs_qp* companion_gdqp,

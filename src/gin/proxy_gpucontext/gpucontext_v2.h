@@ -27,7 +27,7 @@ typedef struct {
   uint32_t* lastVisibleGet; // per-peer index of last get for which the payload is guaranteed visible (via flush GFD)
 } ncclGinProxyGpuCtx_v2_t;
 
-static_assert(sizeof(ncclGinProxyGpuCtx_v2_t) == 72);
+static_assert(sizeof(ncclGinProxyGpuCtx_v2_t) == 72, "ncclGinProxyGpuCtx_v2_t size must be 72 bytes");
 
 void ncclGinProxyGpuCtx_v2_init(void* ctxArray, int idx, int nRanks, uint32_t queueSize, ncclGinProxyGfd_t* queues,
                                 uint32_t* pis, uint32_t* cis, uint64_t* counters, uint64_t* signals,

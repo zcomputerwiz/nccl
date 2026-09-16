@@ -23,7 +23,7 @@ typedef struct {
   uint64_t* signals;
 } ncclGinProxyGpuCtx_v1_t;
 
-static_assert(sizeof(ncclGinProxyGpuCtx_v1_t) == 48);
+static_assert(sizeof(ncclGinProxyGpuCtx_v1_t) == 48, "ncclGinProxyGpuCtx_v1_t size must be 48 bytes");
 
 void ncclGinProxyGpuCtx_v1_init(void* ctxArray, int idx, int nRanks, uint32_t queueSize, ncclGinProxyGfd_t* queues,
                                 uint32_t* pis, uint32_t* cis, uint64_t* counters, uint64_t* signals);
