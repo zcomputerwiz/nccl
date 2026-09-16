@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "torch"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "torch_c10d_nccl"
+version = "2.11.0"
+description = "Native ProcessGroupNCCL distributed communication backend for PyTorch on Windows"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "torch",
+]
+classifiers = [
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
