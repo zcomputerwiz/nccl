@@ -1,0 +1,46 @@
+name: Build NCCL
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs-on:
+        description: "The runner to use for the build"
+        required: true
+        type: string
+        default: windows-2022
+      cuda-version:
+        description: "The CUDA version to use for the build"
+        required: true
+        type: string
+        default: "12.8.0"
+      cuda-archs:
+        description: "CUDA architectures, e.g. 80 for Ampere/Ada; separate multiple values with semicolons"
+        required: true
+        type: string
+        default: "80"
+      build-type:
+        description: "CMake build type (Release, Debug, RelWithDebInfo)"
+        required: true
+        type: string
+        default: "Release"
+      upload-to-release:
+        description: "Upload package to this release"
+        required: false
+        type: boolean
+        default: false
+      release-version:
+        description: "Upload package to this release (leave empty for current commit/tag)"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  build-nccl:
+    uses: ./.github/workflows/_build.yml
+    with:
+      runs-on: ${{ inputs.runs-on }}
+      cuda-version: ${{ inputs.cuda-version }}
+      cuda-archs: ${{ inputs.cuda-archs }}
+      build-type: ${{ inputs.build-type }}
+      upload-to-release: ${{ inputs.upload-to-release }}
+      release-version: ${{ inputs.release-version }}

@@ -1,0 +1,165 @@
+name: ~Build NCCL template
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: "The runner to use for the build"
+        required: true
+        type: string
+      cuda-version:
+        description: "The CUDA version to use for the build"
+        required: true
+        type: string
+      cuda-archs:
+        description: "CUDA architectures, e.g. 80 for Ampere/Ada; separate multiple values with semicolons"
+        required: false
+        type: string
+        default: "80"
+      build-type:
+        description: "CMake build type (Release, Debug, RelWithDebInfo)"
+        required: false
+        type: string
+        default: "Release"
+      upload-to-release:
+        description: "Upload package to this release"
+        required: false
+        type: boolean
+        default: false
+      release-version:
+        description: "Upload package to this release"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  build-nccl:
+    runs-on: ${{ inputs.runs-on }}
+    name: Build NCCL (${{ inputs.runs-on }}-cu${{ inputs.cuda-version }}-sm${{ inputs.cuda-archs }})
+    steps:
+      - name: Enable long paths in Windows and Git
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+          git config --global core.longpaths true
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release-version || github.sha }}
+          submodules: recursive
+
+      - name: Add MSBuild to PATH
+        if: runner.os == 'Windows'
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Set up MSVC Dev Environment
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install CUDA for Windows ${{ inputs.cuda-version }}
+        if: runner.os == 'Windows'
+        uses: Jimver/cuda-toolkit@v0.2.35
+        id: cuda-toolkit-win
+        with:
+          cuda: ${{ inputs.cuda-version }}
+          method: "network"
+
+      - name: Install CUDA for Linux ${{ inputs.cuda-version }}
+        if: runner.os == 'Linux'
+        uses: Jimver/cuda-toolkit@v0.2.35
+        id: cuda-toolkit-linux
+        with:
+          cuda: ${{ inputs.cuda-version }}
+          linux-local-args: '["--toolkit"]'
+          method: "network"
+
+      - name: Verify Environment
+        shell: bash
+        run: |
+          echo "=== System Info ==="
+          cmake --version
+          nvcc --version || true
+          echo "CUDA_PATH: ${CUDA_PATH:-none}"
+
+      - name: Configure CMake
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cmake -B build -G "Visual Studio 17 2022" -A x64 \
+              -DCMAKE_BUILD_TYPE="${{ inputs.build-type }}" \
+              -DCMAKE_CUDA_ARCHITECTURES="${{ inputs.cuda-archs }}" \
+              -DBUILD_NCCL4PY=OFF \
+              -DWERROR=OFF
+          else
+            cmake -B build \
+              -DCMAKE_BUILD_TYPE="${{ inputs.build-type }}" \
+              -DCMAKE_CUDA_ARCHITECTURES="${{ inputs.cuda-archs }}" \
+              -DBUILD_NCCL4PY=OFF \
+              -DWERROR=OFF
+          fi
+
+      - name: Build NCCL
+        id: build_nccl
+        shell: bash
+        run: |
+          EXIT_CODE=0
+          cmake --build build --config "${{ inputs.build-type }}" --parallel || EXIT_CODE=$?
+          echo "build_exit_code=$EXIT_CODE" | tee -a "$GITHUB_OUTPUT"
+          exit $EXIT_CODE
+
+      - name: Log build failure diagnostics
+        if: always() && steps.build_nccl.outputs.build_exit_code != 0
+        shell: bash
+        run: |
+          echo "=== Workspace Directory Listing ==="
+          ls -la ./
+          if [ -d "build" ]; then
+            echo "=== Build Directory Listing ==="
+            ls -la build/
+          fi
+
+      - name: Install and Package NCCL
+        if: always() && steps.build_nccl.outputs.build_exit_code == 0
+        shell: bash
+        run: |
+          cmake --install build --prefix install_nccl --config "${{ inputs.build-type }}"
+
+          echo "=== Installed Contents ==="
+          find install_nccl -type f
+
+          CUDA_VER_SHORT=$(echo "${{ inputs.cuda-version }}" | awk -F. '{print $1 "." $2}')
+          ARCH_SHORT=$(echo "${{ inputs.cuda-archs }}" | tr ';' '-')
+
+          mkdir -p dist
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            PACKAGE_NAME="nccl-windows-x86_64-cuda${CUDA_VER_SHORT}-sm${ARCH_SHORT}"
+            7z a "dist/${PACKAGE_NAME}.zip" ./install_nccl/*
+            echo "PACKAGE_PATH=dist/${PACKAGE_NAME}.zip" >> $GITHUB_ENV
+            echo "PACKAGE_NAME=${PACKAGE_NAME}" >> $GITHUB_ENV
+          else
+            PACKAGE_NAME="nccl-linux-x86_64-cuda${CUDA_VER_SHORT}-sm${ARCH_SHORT}"
+            tar -czvf "dist/${PACKAGE_NAME}.tar.gz" -C install_nccl .
+            echo "PACKAGE_PATH=dist/${PACKAGE_NAME}.tar.gz" >> $GITHUB_ENV
+            echo "PACKAGE_NAME=${PACKAGE_NAME}" >> $GITHUB_ENV
+          fi
+
+      - name: Upload NCCL artifact
+        if: always() && steps.build_nccl.outputs.build_exit_code == 0
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}
+          path: ${{ env.PACKAGE_PATH }}
+
+      - name: Upload Release Asset
+        if: inputs.upload-to-release && steps.build_nccl.outputs.build_exit_code == 0
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release upload "${{ inputs.release-version }}" "${{ env.PACKAGE_PATH }}" --clobber
