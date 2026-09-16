@@ -1,0 +1,79 @@
+name: Build NCCL matrix and deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload-to-release:
+        description: "Upload packages to GitHub Release"
+        required: false
+        type: boolean
+        default: false
+      release-version:
+        description: "Existing release tag to upload to (leave empty to skip release)"
+        required: false
+        type: string
+        default: ""
+  create:
+    tags:
+      - v*
+
+jobs:
+  setup_release:
+    name: Setup Release
+    runs-on: ubuntu-latest
+    outputs:
+      release-version: ${{ steps.extract_branch.outputs.branch }}
+      should-release: ${{ steps.check_release.outputs.should_release }}
+    steps:
+      - name: Check trigger type
+        id: check_release
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "create" && "${{ github.ref_type }}" == "tag" ]]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ inputs.upload-to-release }}" == "true" && -n "${{ inputs.release-version }}" ]]; then
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Get tag version
+        if: steps.check_release.outputs.should_release == 'true'
+        id: extract_branch
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "create" ]]; then
+            echo "branch=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch=${{ inputs.release-version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        if: github.event_name == 'create' && github.ref_type == 'tag'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release create "${{ steps.extract_branch.outputs.branch }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "${{ steps.extract_branch.outputs.branch }}" \
+            --generate-notes || true
+
+  build_matrix:
+    name: Build NCCL Matrix
+    needs: setup_release
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022]
+        cuda-version: ["12.4.0", "12.6.0", "12.8.0"]
+        cuda-archs: ["80;86;89;90"]
+        build-type: ["Release"]
+    uses: ./.github/workflows/_build.yml
+    with:
+      runs-on: ${{ matrix.os }}
+      cuda-version: ${{ matrix.cuda-version }}
+      cuda-archs: ${{ matrix.cuda-archs }}
+      build-type: ${{ matrix.build-type }}
+      upload-to-release: ${{ needs.setup_release.outputs.should-release == 'true' }}
+      release-version: ${{ needs.setup_release.outputs.release-version }}
