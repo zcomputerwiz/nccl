@@ -111,6 +111,7 @@ sources = [
     os.path.join("src", "ProcessGroupNCCL.cpp"),
     os.path.join("src", "NCCLUtils.cpp"),
     os.path.join("src", "nccl.cpp"),
+    os.path.join("src", "CUDAEventCache.cpp"),
 ]
 
 include_dirs = [
@@ -161,6 +162,7 @@ libraries = [
     "cuda",
     "cudart",
     "nccl",
+    "fmt",
 ]
 
 ext_modules = [

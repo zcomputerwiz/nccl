@@ -1195,6 +1195,9 @@ void ProcessGroupNCCL::deregisterMemPool(at::cuda::MemPool* pool) {
 
 c10::intrusive_ptr<intra_node_comm::IntraNodeComm> ProcessGroupNCCL::
     initIntraNodeComm() {
+#ifdef _WIN32
+  return nullptr;
+#else
   using IntraNodeComm = intra_node_comm::IntraNodeComm;
   if (!IntraNodeComm::isEnabled()) {
     return nullptr;
@@ -1206,6 +1209,7 @@ c10::intrusive_ptr<intra_node_comm::IntraNodeComm> ProcessGroupNCCL::
   } else {
     return nullptr;
   }
+#endif
 }
 
 void ProcessGroupNCCL::setSequenceNumberForGroup() {
@@ -4495,6 +4499,7 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::allreduce(
   }
   check_gpu_single_tensor(tensor);
 
+#ifndef _WIN32
   if (intraNodeComm_ != nullptr && opts.reduceOp == ReduceOp::SUM) {
     using namespace intra_node_comm;
     auto algo = intraNodeComm_->selectAllReduceAlgo(tensor);
@@ -4503,6 +4508,7 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::allreduce(
       return c10::make_intrusive<IntraNodeCommWork>();
     }
   }
+#endif
   TORCH_CHECK(
       !isUnsupportedFloat8(tensor.scalar_type()),
       "Unsupported Float8 type for NCCL reduction");
