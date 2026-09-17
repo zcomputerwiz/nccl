@@ -4,8 +4,18 @@ import shutil
 
 if sys.platform == "win32":
     os.environ["DISTUTILS_USE_SDK"] = "1"
+    # Ensure MSVC's link.exe takes precedence over Git's /usr/bin/link.exe
+    vc_tools_dir = os.environ.get("VCToolsInstallDir", "")
+    host_arch = os.environ.get("VSCMD_ARG_HOST_ARCH", "x64")
+    tgt_arch = os.environ.get("VSCMD_ARG_TGT_ARCH", "x64")
+    if vc_tools_dir:
+        msvc_bin = os.path.join(vc_tools_dir, "bin", f"Host{host_arch}", tgt_arch)
+        if os.path.exists(os.path.join(msvc_bin, "link.exe")):
+            os.environ["PATH"] = msvc_bin + os.pathsep + os.environ.get("PATH", "")
+            print(f"Prepended MSVC linker to PATH: {msvc_bin}")
 
 from setuptools import setup, find_packages
+
 import torch
 from torch.utils import cpp_extension
 
@@ -136,8 +146,10 @@ extra_compile_args = {
         "/wd4244",
         "/wd4251",
         "/wd4275",
+        "/wd4005",
     ]
 }
+
 
 
 libraries = [

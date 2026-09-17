@@ -85,9 +85,9 @@ jobs:
           python --version
           echo "CUDA_PATH: ${CUDA_PATH:-none}"
 
-      - name: Cache Installed NCCL
+      - name: Restore Installed NCCL Cache
         id: cache_nccl
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: install_nccl
           key: nccl-install-cu${{ env.CUDA_VER }}-archs-${{ env.CUDA_ARCHS }}-${{ hashFiles('src/**', 'CMakeLists.txt') }}
@@ -133,6 +133,13 @@ jobs:
           echo "=== Installed NCCL Contents ==="
           find install_nccl -type f
 
+      - name: Save Installed NCCL Cache
+        if: steps.cache_nccl.outputs.cache-hit != 'true' && steps.build_nccl.outputs.build_exit_code == 0
+        uses: actions/cache/save@v4
+        with:
+          path: install_nccl
+          key: nccl-install-cu${{ env.CUDA_VER }}-archs-${{ env.CUDA_ARCHS }}-${{ hashFiles('src/**', 'CMakeLists.txt') }}
+
       - name: Install PyTorch and Build Dependencies
         shell: bash
         run: |
@@ -145,6 +152,17 @@ jobs:
         env:
           DISTUTILS_USE_SDK: '1'
         run: |
+          # Ensure MSVC's link.exe takes precedence over Git's /usr/bin/link.exe
+          if [ -n "${VCToolsInstallDir:-}" ]; then
+            vctools_dir="$(cygpath -u "${VCToolsInstallDir}")"
+            vctools_dir="${vctools_dir%/}"
+            msvc_bin="${vctools_dir}/bin/Host${VSCMD_ARG_HOST_ARCH:-x64}/${VSCMD_ARG_TGT_ARCH:-x64}"
+            if [ -x "$msvc_bin/link.exe" ]; then
+              export PATH="$msvc_bin:$PATH"
+              echo "Using MSVC linker: $(command -v link.exe || which link)"
+            fi
+          fi
+
           REPO_ROOT=$(pwd -W 2>/dev/null || pwd)
           export NCCL_DIR="${REPO_ROOT}/install_nccl"
           export DISTUTILS_USE_SDK=1
@@ -156,6 +174,7 @@ jobs:
 
           echo "=== Generated Distribution Files ==="
           ls -la dist/
+
 
 
       - name: Test Wheel Installation & Verification
