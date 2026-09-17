@@ -18,6 +18,11 @@ if not nccl_dir:
             nccl_dir = candidate
             break
 
+if nccl_dir:
+    if sys.platform == "win32" and nccl_dir.startswith("/") and len(nccl_dir) > 2 and nccl_dir[2] == "/":
+        nccl_dir = nccl_dir[1] + ":" + nccl_dir[2:]
+    nccl_dir = os.path.abspath(nccl_dir)
+
 nccl_include_dirs = []
 nccl_library_dirs = []
 

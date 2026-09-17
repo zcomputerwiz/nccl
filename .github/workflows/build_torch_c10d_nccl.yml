@@ -75,62 +75,79 @@ jobs:
           cache: 'pip'
 
       - name: Verify Build Environment
-        shell: powershell
+        shell: bash
         run: |
-          Write-Host "=== System & Toolchain Info ==="
+          echo "=== System & Toolchain Info ==="
           cmake --version
-          nvcc --version
+          nvcc --version || true
           python --version
-          Write-Host "CUDA_PATH: $env:CUDA_PATH"
+          echo "CUDA_PATH: ${CUDA_PATH:-none}"
 
       - name: Configure CMake for NCCL
-        shell: powershell
+        shell: bash
         run: |
-          cmake -B build -G "Visual Studio 17 2022" -A x64 `
-            -DCMAKE_BUILD_TYPE=Release `
-            -DCMAKE_CUDA_ARCHITECTURES="$env:CUDA_ARCHS" `
-            -DCMAKE_CXX_STANDARD=17 `
-            -DCMAKE_CUDA_STANDARD=17 `
-            -DBUILD_NCCL4PY=OFF `
+          cmake -B build -G "Visual Studio 17 2022" -A x64 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CUDA_ARCHITECTURES="${CUDA_ARCHS}" \
+            -DCMAKE_CXX_STANDARD=17 \
+            -DCMAKE_CUDA_STANDARD=17 \
+            -DBUILD_NCCL4PY=OFF \
             -DWERROR=OFF
 
-      - name: Build and Install NCCL
-        shell: powershell
+      - name: Build NCCL
+        id: build_nccl
+        shell: bash
         run: |
-          cmake --build build --config Release --target nccl --parallel
+          EXIT_CODE=0
+          cmake --build build --config Release --parallel || EXIT_CODE=$?
+          echo "build_exit_code=$EXIT_CODE" | tee -a "$GITHUB_OUTPUT"
+          exit $EXIT_CODE
+
+      - name: Log build failure diagnostics
+        if: always() && steps.build_nccl.outputs.build_exit_code != 0
+        shell: bash
+        run: |
+          echo "=== Workspace Directory Listing ==="
+          ls -la ./
+          if [ -d "build" ]; then
+            echo "=== Build Directory Listing ==="
+            ls -la build/
+          fi
+
+      - name: Install NCCL
+        if: steps.build_nccl.outputs.build_exit_code == 0
+        shell: bash
+        run: |
           cmake --install build --prefix install_nccl --config Release
-          Write-Host "Installed NCCL tree:"
-          Get-ChildItem -Recurse install_nccl | Select-Object FullName
+          echo "=== Installed NCCL Contents ==="
+          find install_nccl -type f
 
       - name: Install PyTorch and Build Dependencies
-        shell: powershell
+        shell: bash
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          Write-Host "Installing PyTorch $env:TORCH_VER + cu128..."
-          python -m pip install "torch==$env:TORCH_VER" --index-url https://download.pytorch.org/whl/cu128
+          echo "Installing PyTorch ${TORCH_VER} + cu128..."
+          python -m pip install "torch==${TORCH_VER}" --index-url https://download.pytorch.org/whl/cu128
 
       - name: Build torch_c10d_nccl Wheel
-        shell: powershell
+        shell: bash
         run: |
-          $repoRoot = (Get-Item .).FullName
-          $env:NCCL_DIR = "$repoRoot\install_nccl"
-          Write-Host "NCCL_DIR: $env:NCCL_DIR"
+          REPO_ROOT=$(pwd -W 2>/dev/null || pwd)
+          export NCCL_DIR="${REPO_ROOT}/install_nccl"
+          echo "NCCL_DIR: ${NCCL_DIR}"
 
-          Set-Location bindings\torch_c10d_nccl
-          python setup.py bdist_wheel -d "$repoRoot\dist"
-          Set-Location $repoRoot
+          cd bindings/torch_c10d_nccl
+          python setup.py bdist_wheel -d "${REPO_ROOT}/dist"
+          cd "${REPO_ROOT}"
 
-          Write-Host "=== Generated Distribution Files ==="
-          Get-ChildItem dist\*.whl | Select-Object Name, Length
+          echo "=== Generated Distribution Files ==="
+          ls -la dist/
 
       - name: Test Wheel Installation & Verification
-        shell: powershell
+        shell: bash
         run: |
-          $wheel = (Get-Item dist\*.whl).FullName
-          Write-Host "Testing installation of $wheel..."
-          python -m pip install $wheel
-
-          python -c @"
+          python -m pip install dist/*.whl
+          python -c "
           import torch
           import torch_c10d_nccl
           import torch.distributed as dist
@@ -143,7 +160,7 @@ jobs:
           print('ProcessGroupNCCL Class:', dist.ProcessGroupNCCL)
           print('ProcessGroupNCCL Options:', dist.ProcessGroupNCCL.Options)
           print('SUCCESS: Route B (torch_c10d_nccl) verified working cleanly!')
-          "@
+          "
 
       - name: Upload Wheel Artifact
         uses: actions/upload-artifact@v4
