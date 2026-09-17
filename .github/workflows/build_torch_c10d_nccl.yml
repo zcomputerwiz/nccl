@@ -39,8 +39,10 @@ jobs:
       TORCH_VER: ${{ inputs.torch-version || '2.11.0' }}
       PYTHON_VER: ${{ inputs.python-version || '3.12' }}
       CUDA_ARCHS: ${{ inputs.cuda-archs || '80;86;89;90' }}
+      DISTUTILS_USE_SDK: '1'
 
     steps:
+
       - name: Enable long paths in Windows and Git
         shell: powershell
         run: |
@@ -83,7 +85,15 @@ jobs:
           python --version
           echo "CUDA_PATH: ${CUDA_PATH:-none}"
 
+      - name: Cache Installed NCCL
+        id: cache_nccl
+        uses: actions/cache@v4
+        with:
+          path: install_nccl
+          key: nccl-install-cu${{ env.CUDA_VER }}-archs-${{ env.CUDA_ARCHS }}-${{ hashFiles('src/**', 'CMakeLists.txt') }}
+
       - name: Configure CMake for NCCL
+        if: steps.cache_nccl.outputs.cache-hit != 'true'
         shell: bash
         run: |
           cmake -B build -G "Visual Studio 17 2022" -A x64 \
@@ -95,6 +105,7 @@ jobs:
             -DWERROR=OFF
 
       - name: Build NCCL
+        if: steps.cache_nccl.outputs.cache-hit != 'true'
         id: build_nccl
         shell: bash
         run: |
@@ -104,7 +115,7 @@ jobs:
           exit $EXIT_CODE
 
       - name: Log build failure diagnostics
-        if: always() && steps.build_nccl.outputs.build_exit_code != 0
+        if: always() && steps.cache_nccl.outputs.cache-hit != 'true' && steps.build_nccl.outputs.build_exit_code != 0
         shell: bash
         run: |
           echo "=== Workspace Directory Listing ==="
@@ -115,7 +126,7 @@ jobs:
           fi
 
       - name: Install NCCL
-        if: steps.build_nccl.outputs.build_exit_code == 0
+        if: steps.cache_nccl.outputs.cache-hit != 'true' && steps.build_nccl.outputs.build_exit_code == 0
         shell: bash
         run: |
           cmake --install build --prefix install_nccl --config Release
@@ -125,15 +136,18 @@ jobs:
       - name: Install PyTorch and Build Dependencies
         shell: bash
         run: |
-          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade pip setuptools wheel ninja
           echo "Installing PyTorch ${TORCH_VER} + cu128..."
           python -m pip install "torch==${TORCH_VER}" --index-url https://download.pytorch.org/whl/cu128
 
       - name: Build torch_c10d_nccl Wheel
         shell: bash
+        env:
+          DISTUTILS_USE_SDK: '1'
         run: |
           REPO_ROOT=$(pwd -W 2>/dev/null || pwd)
           export NCCL_DIR="${REPO_ROOT}/install_nccl"
+          export DISTUTILS_USE_SDK=1
           echo "NCCL_DIR: ${NCCL_DIR}"
 
           cd bindings/torch_c10d_nccl
@@ -142,6 +156,7 @@ jobs:
 
           echo "=== Generated Distribution Files ==="
           ls -la dist/
+
 
       - name: Test Wheel Installation & Verification
         shell: bash

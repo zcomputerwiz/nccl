@@ -1,11 +1,16 @@
 import os
 import sys
 import shutil
+
+if sys.platform == "win32":
+    os.environ["DISTUTILS_USE_SDK"] = "1"
+
 from setuptools import setup, find_packages
 import torch
 from torch.utils import cpp_extension
 
 this_dir = os.path.dirname(os.path.abspath(__file__))
+
 
 # 1. Locate NCCL
 nccl_dir = os.environ.get("NCCL_DIR", "")
@@ -108,7 +113,7 @@ library_dirs = [
 
 extra_compile_args = {
     "cxx": [
-        "/std:c++17",
+        "/std:c++20",
         "/EHsc",
         "/MD",
         "/O2",
@@ -117,11 +122,23 @@ extra_compile_args = {
         "/DNOMINMAX",
         "/DWIN32_LEAN_AND_MEAN",
         "/DUSE_C10D_NCCL=1",
+        "/DNCCL_HAS_CONFIG=1",
+        "/DNCCL_HAS_COMM_SPLIT=1",
+        "/DNCCL_HAS_COMM_NONBLOCKING=1",
+        "/DNCCL_HAS_INIT_RANK_SCALABLE=1",
+        "/DNCCL_HAS_COMM_REGISTER=1",
+        "/DNCCL_HAS_COMM_WINDOW_REGISTER=1",
+        "/DNCCL_HAS_MEM_ALLOC=1",
+        "/DNCCL_HAS_REMOTE_ERROR=1",
+        "/DNCCL_HAS_COMM_SHRINK=1",
         "/wd4273",
         "/wd4267",
         "/wd4244",
+        "/wd4251",
+        "/wd4275",
     ]
 }
+
 
 libraries = [
     "torch_cpu",
